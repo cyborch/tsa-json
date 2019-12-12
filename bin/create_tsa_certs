@@ -1,0 +1,53 @@
+#!/bin/sh
+
+
+cd `dirname $0`
+export OPENSSL_CONF="`pwd`/../config/ca-tsa.cnf"
+
+error () {
+    echo "TSA cert creation failed!" >&2
+    exit 1
+}
+
+
+create_ca () {
+    echo "Creating a new CA for the TSA..."
+    CN="UTS-SERVER CA"
+    DN_SECTION="dn_ca"
+    export CN
+    export DN_SECTION
+    openssl req -days 99999 -new -x509 -nodes \
+        -out tsaca.pem -keyout tsacakey.pem
+    test $? != 0 && error
+}
+
+create_tsa_cert () {
+    EXT=$3
+    INDEX=$2
+    CN=$1; export CN
+    DN_SECTION="dn_cert";export DN_SECTION
+
+    openssl req -days 99999 -new \
+        -out tsa_req${INDEX}.pem -keyout tsa_key${INDEX}.pem
+    test $? != 0 && error
+
+    openssl rsa -in tsa_key${INDEX}.pem -outform PEM -pubout -out tsa_pub${INDEX}.pem
+    test $? != 0 && error
+    
+    echo Using extension $EXT
+    openssl x509 -days 99999 -req \
+        -in tsa_req${INDEX}.pem -out tsa_cert${INDEX}.pem \
+        -CA tsaca.pem -CAkey tsacakey.pem -CAcreateserial \
+        -extfile $OPENSSL_CONF -extensions $EXT
+    test $? != 0 && error
+}
+
+echo "Creating CA for TSA..."
+mkdir -p /var/lib/tsa
+cd /var/lib/tsa
+create_ca
+
+echo "Creating tsa_cert1.pem TSA server cert..."
+create_tsa_cert "TSA CERT 1" 1 tsa_cert
+
+exit 0

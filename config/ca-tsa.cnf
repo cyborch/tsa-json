@@ -1,0 +1,64 @@
+#----------------------------------------------------------------------
+#
+# Properties needed for a Time-Stamp Authority (TSA) certificates
+#
+#----------------------------------------------------------------------
+
+DN_SECTION=dn_ca
+CN=DEFAULT
+
+# Extensions required to a TSA certificate
+[ tsa_cert ]
+
+# TSA server cert is not a CA cert, disabling CA role
+basicConstraints=CA:FALSE
+
+# The following key usage flags are mandatory for TSA server certificates.
+# This parameters set the main specificities of a TSA certificate
+keyUsage = nonRepudiation, digitalSignature
+extendedKeyUsage = critical,timeStamping
+
+# PKIX recommendations harmless if included in all certificates.
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid,issuer:always
+
+
+#----------------------------------------------------------------------
+#
+# Other Properties for the CA and non-tsa certificates
+#
+#----------------------------------------------------------------------
+
+# OpenSSL parameters for certificate requests generation
+[ req ]
+default_bits		= 4096
+default_md		= sha512
+distinguished_name	= $ENV::DN_SECTION
+encrypt_rsa_key		= no
+prompt 			= no
+# The extentions to add to the self signed cert
+x509_extensions	= v3_ca
+
+# Common properties of the CA
+[ dn_ca ]
+countryName			= US
+stateOrProvinceName		= New York
+localityName			= New York
+organizationName		= stated.at
+
+# Extensions for a typical CA
+[ v3_ca ]
+
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid:always,issuer:always
+basicConstraints = critical,CA:true
+keyUsage = cRLSign, keyCertSign
+
+# Common properties of all the certificates (CN, OU, etc...)
+[ dn_cert ]
+countryName			= US
+stateOrProvinceName		= New York
+localityName			= New York
+organizationName		= stated.at
+# CN is passed through environment variable "CN"
+commonName			= tsa.stated.at
