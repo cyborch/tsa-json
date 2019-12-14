@@ -34,6 +34,9 @@ RUN mv *.jar lib
 RUN mkdir -p bin
 RUN mv tsa-json* bin
 
+RUN mkdir -p config
+COPY ./config/server.properties ./config
+
 RUN apk update
 
 # Install ntp and configure for North America

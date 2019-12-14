@@ -44,8 +44,8 @@ data class MessageImprint(
  * @property messageImprint a hash algorithm OID and the hash value of
  * the data to be time-stamped.
  *
- * @property reqPolicy indicates the TSA policy under which the
- * TimeStampToken SHOULD be provided.
+ * @property context The context in which the data is to be time-stamped.
+ * This field is optional and will be carried as-is to the response
  *
  * @property nonce allows the client to verify the timeliness of
  * the response when no local clock is available.  The nonce is a large
@@ -57,7 +57,7 @@ data class MessageImprint(
 data class Request(
     val version: Int,
     val messageImprint: MessageImprint,
-    val reqPolicy: String?,
+    val context: String?,
     val nonce: BigInteger?
 ) {
     private fun validVersion(): Boolean = version == 1

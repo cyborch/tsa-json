@@ -6,65 +6,103 @@ import java.math.BigInteger
 import java.math.RoundingMode
 import java.util.*
 
-/*
-* // Each section is separated by a dot
-// JWS header, must be base64 encoded
-{
-  "typ": "Time-Stamp",
-  "alg": "SHA1withRSA"
-}
-// Response, must be base64 encoded
-{
-  "status": {
-    "status": 0, // granted
-    "statusString": null,
-    "failInfo": null
-  },
-  "timeStampToken": {
-    "contentType": "id-signedData",
-    "content": {
-      "version": 1,
-      "policy": "policy1", // from request
-      "messageImprint": "40f1f310cbae011642d33edbad742ea3c581864d", // from request
-      "serialNumber": "4324222", // The serialNumber field is an integer assigned by the TSA to each TimeStampToken.  It MUST be unique for each TimeStampToken issued by a given TSA
-      "genTime": "19990609001326.34352Z", // YYYYMMDDhhmmss[.s...]Z
-      "accuracy": {
-        "seconds": 0,
-        "millis": 0,
-        "micros": 42
-      },
-      "ordering": false,
-      "nonce": "3455345232345454" // from request
-    }
-  }
-}
-// base64 encoded signature follows
-
-* */
 private val gson = GsonBuilder()
     .setDateFormat("yyyyMMddHHmmss'Z'")
     .create()
 
+/**
+ * A JWS header with a "Time-Stamp" type and a "SHA1withRSA" algorithm.
+ *
+ * @property x5u the URL of the certificate containing the public key
+ * used to verify the signature.
+ */
 data class Header(
     val typ: String = "Time-Stamp",
-    val alg: String = "SHA1withRSA"
+    val alg: String = "SHA1withRSA",
+    val x5u: String
 )
 
+/**
+ * Status of a response.
+ *
+ * @property status 0 on granted, 1 on rejected
+ *
+ * @property statusString
+ * One of
+ *
+ *  - badAlg: unrecognized or unsupported Algorithm Identifier
+ *  - badRequest: transaction not permitted or supported
+ *  - badDataFormat: the data submitted has the wrong format
+ *  - timeNotAvailable: the TSA's time source is not available
+ *  - systemFailure: the request cannot be handled due to system failure
+ */
 data class Status(
     val status: Int,
-    val statusString: String? = null,
-    val failInfo: String? = null
+    val statusString: String? = null
 )
 
+/**
+ * The time deviation around the UTC time contained in genTime in Content.
+ *
+ * If either seconds, millis or micros is missing, then a value of zero
+ * MUST be taken for the missing field.
+ *
+ * By adding the accuracy value to the genTime, an upper limit
+ * of the time at which the time-stamp token has been created by the TSA
+ * can be obtained.  In the same way, by subtracting the accuracy to the
+ * genTime, a lower limit of the time at which the time-stamp
+ * token has been created by the TSA can be obtained.
+ *
+ * @see Content
+ *
+ * @property seconds an integer between -999 and 999
+ *
+ * @property millis an integer between -999 and 999
+ *
+ * @property micros an integer between -999 and 999
+ */
 data class Accuracy(
     val seconds: Int,
     val millis: Int = 0,
     val micros: Int = 0
 )
 
+/**
+ * Content of a TimeStampToken in a Response.
+ *
+ * @see TimeStampToken
+ *
+ * @see Response
+ *
+ * @see Request
+ *
+ * @property version 1 at the time of this writing
+ *
+ * @property context MUST have the same value as the similar field in Request
+ *
+ * @property messageImprint MUST have the same value as the similar field in Request
+ *
+ * @property serialNumber MUST be unique for each TimeStampToken issued by
+ * a given TSA (i.e., the TSA name and serial number identify a unique
+ * TimeStampToken)
+ *
+ * @property genTime the time at which the time-stamp token has been created by
+ * the TSA.
+ *
+ * @property accuracy the time deviation around the UTC time contained in genTime
+ *
+ * @property ordering if set to true, every time-stamp
+ * token from the same TSA can always be ordered based on the genTime
+ * field, regardless of the genTime accuracy
+ *
+ * @property nonce
+ * The nonce field MUST be present if it was present in the
+ * Request. In such a case it MUST equal the value provided in the
+ * Request structure.
+ */
 data class Content(
     val version: Int,
-    val policy: String?,
+    val context: String?,
     val messageImprint: String,
     val serialNumber: BigInteger,
     val genTime: Date,
@@ -73,11 +111,29 @@ data class Content(
     val nonce: BigInteger?
 )
 
+/**
+ * Content type and content of the response.
+ *
+ * In version 1, content will always be set to "id-signedData"
+ *
+ * @see Content
+ *
+ * @property contentType set to "id-signedData"
+ *
+ * @property content the content of the time stamp token
+ */
 data class TimeStampToken(
     val contentType: String,
     val content: Content
 )
 
+/**
+ * The status of the time stamp response.
+ *
+ * @see Status
+ *
+ * @see TimeStampToken
+ */
 data class Response(
     val status: Status,
     val timeStampToken: TimeStampToken?
@@ -91,8 +147,21 @@ private fun encode(text: ByteArray) = Base64
 private fun encode(text: String) = encode(text
     .toByteArray(charset("UTF-8")))
 
+/**
+ * Create a response to a request.
+ *
+ * @see Request
+ *
+ * @see Header
+ *
+ * @see Response
+ *
+ * @return Base 64 encoded, dot (.) delimited Header, Response, and signature
+ */
 fun response(request: Request): String {
-    val header = encode(gson.toJson(Header()))
+    val header = encode(gson.toJson(Header(
+        x5u = config().getProperty("x5u")
+    )))
     var offset = chronyOffset()
     val seconds = BigDecimal(offset).setScale(0, RoundingMode.DOWN).toInt()
     offset -= seconds
@@ -105,7 +174,7 @@ fun response(request: Request): String {
             "id-signedData",
             Content(
                 1,
-                request.reqPolicy,
+                request.context,
                 request.messageImprint.hashedMessage,
                 nextSerial(),
                 Date(),
