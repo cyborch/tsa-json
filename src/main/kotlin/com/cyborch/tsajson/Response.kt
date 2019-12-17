@@ -9,19 +9,20 @@ import java.math.BigInteger
 import java.math.RoundingMode
 import java.util.*
 
+
 private val gson = GsonBuilder()
-    .setDateFormat("yyyyMMddHHmmss'Z'")
+    .setDateFormat("yyyy-MM-dd'T'HH:mm:ssZ")
     .create()
 
 /**
- * A JWS header with a "Time-Stamp" type and a "SHA1withRSA" algorithm.
+ * A JWS header with a "Time-Stamp" type and a "RS256" algorithm.
  *
  * @property x5u the URL of the certificate containing the public key
  * used to verify the signature.
  */
 data class Header(
     val typ: String = "Time-Stamp",
-    val alg: String = "SHA1withRSA",
+    val alg: String = "RS256",
     val x5u: String
 )
 
