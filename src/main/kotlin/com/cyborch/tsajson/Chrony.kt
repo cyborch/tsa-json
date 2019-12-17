@@ -13,7 +13,7 @@ import kotlin.streams.toList
  * The chrony documentation can be found here:
  * https://chrony.tuxfamily.org/doc/3.5/chronyc.html#tracking
  *
- * @return Last offset in seconds.
+ * @return Last offset in seconds or null in case of an error
  */
 fun chronyOffset() =
     Runtime
@@ -23,7 +23,8 @@ fun chronyOffset() =
         .bufferedReader(charset("UTF-8"))
         .lines()
         .toList()
-        .first()
-        .split(",")
-        .get(5)
-        .toDouble()
+        .filter { it.toString().endsWith("Normal") }
+        .firstOrNull()
+        ?.split(",")
+        ?.get(5)
+        ?.toDouble()
