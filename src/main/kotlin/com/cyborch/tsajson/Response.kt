@@ -1,6 +1,9 @@
 package com.cyborch.tsajson
 
 import com.google.gson.GsonBuilder
+import org.jose4j.jws.AlgorithmIdentifiers
+import org.jose4j.jws.JsonWebSignature
+import org.jose4j.jwx.HeaderParameterNames
 import java.math.BigDecimal
 import java.math.BigInteger
 import java.math.RoundingMode
@@ -139,52 +142,56 @@ data class Response(
     val timeStampToken: TimeStampToken?
 )
 
-private fun encode(text: ByteArray) = Base64
-    .getEncoder()
-    .encode(text)
-    .toString(charset("UTF-8"))
-
-private fun encode(text: String) = encode(text
-    .toByteArray(charset("UTF-8")))
-
 /**
  * Create a response to a request.
  *
  * @see Request
  *
- * @see Header
- *
  * @see Response
  *
- * @return Base 64 encoded, dot (.) delimited Header, Response, and signature
+ * @return Base64url encoded, dot (.) delimited header, response, and signature
  */
-fun response(request: Request): String {
-    val header = encode(gson.toJson(Header(
-        x5u = config().getProperty("x5u")
-    )))
+fun response(request: Request?): String {
+    val jws = JsonWebSignature()
+    jws.algorithmHeaderValue = AlgorithmIdentifiers.RSA_USING_SHA256
+    jws.setHeader(HeaderParameterNames.X509_URL, config().getProperty(HeaderParameterNames.X509_URL))
+    jws.setHeader(HeaderParameterNames.TYPE, "application/timestamp-reply+jws")
+    jws.setHeader(HeaderParameterNames.JWK_SET_URL, config().getProperty(HeaderParameterNames.JWK_SET_URL))
+    jws.key = loadPrivateKey()
     var offset = chronyOffset()
-    val seconds = BigDecimal(offset).setScale(0, RoundingMode.DOWN).toInt()
-    offset -= seconds
-    val millis = BigDecimal(offset * 1000).setScale(0, RoundingMode.DOWN).toInt()
-    offset -= millis
-    val micros = BigDecimal(offset * 1000).setScale(0, RoundingMode.DOWN).toInt()
-    val response = Response(
-        Status(0),
-        TimeStampToken(
-            "id-signedData",
-            Content(
-                1,
-                request.context,
-                request.messageImprint.hashedMessage,
-                nextSerial(),
-                Date(),
-                Accuracy(seconds, millis, micros),
-                false,
-                request.nonce
+    if (request != null && offset != null) {
+        val seconds = BigDecimal(offset).setScale(0, RoundingMode.DOWN).toInt()
+        offset -= seconds
+        val millis = BigDecimal(offset * 1000).setScale(0, RoundingMode.DOWN).toInt()
+        offset -= millis
+        val micros = BigDecimal(offset * 1000).setScale(0, RoundingMode.DOWN).toInt()
+        val response = Response(
+            Status(0),
+            TimeStampToken(
+                "id-signedData",
+                Content(
+                    1,
+                    request.context,
+                    request.messageImprint.hashedMessage,
+                    nextSerial(),
+                    Date(),
+                    Accuracy(seconds, millis, micros),
+                    false,
+                    request.nonce
+                )
             )
         )
-    )
-    val payload = gson.toJson(response)
-    val signature = encode(sign(payload, loadPrivateKey()))
-    return header + "." + encode(payload) + "." + signature
+        jws.payload = gson.toJson(response)
+        return jws.compactSerialization
+    } else {
+        var error = "systemFailure";
+        if (request == null) { error = "badDataFormat" }
+        else if (offset == null) { error = "timeNotAvailable" }
+        val response = Response(
+            Status(1,error),
+            null
+        )
+        jws.payload = gson.toJson(response)
+        return jws.compactSerialization
+    }
 }
