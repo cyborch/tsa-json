@@ -1,5 +1,7 @@
 package com.cyborch.tsajson
 
+import io.javalin.http.Context
+import java.lang.Exception
 import java.math.BigInteger
 
 /***
@@ -62,4 +64,16 @@ data class Request(
 ) {
     private fun validVersion(): Boolean = version == 1
     fun valid(): Boolean = validVersion() && messageImprint.valid()
+
+    companion object {
+        fun from(context: Context): Request? {
+            try {
+                val request = context.bodyAsClass(Request::class.java)
+                if (!request.valid()) { return null }
+                return request
+            } catch (ex: Exception) {
+                return null
+            }
+        }
+    }
 }

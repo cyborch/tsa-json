@@ -6,8 +6,5 @@ fun main(args: Array<String>) {
     val app = Javalin.create().start(7000)
     app.get("/pub") { ctx -> ctx.result(publicKeyContent()) }
     app.get("/cert") { ctx -> ctx.result(certContent()) }
-    app.post("/sign") { ctx ->
-        val request = ctx.bodyAsClass(Request::class.java)
-        ctx.result(response(request))
-    }
+    app.post("/sign") { ctx -> ctx.result(response(Request.from(ctx))) }
 }
