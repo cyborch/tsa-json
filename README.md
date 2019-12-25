@@ -92,7 +92,7 @@ response is comprised of three parts, all base 64 encoded and separated by a dot
 
 The header is a JSON Unprotected header.
 
-Only the "alg" and "typ" fields in the header are currently supported. The
+The following fields in the header are currently supported. The
 fields are set as follows:
 
  - typ: application/timestamp-reply+jws
@@ -100,6 +100,7 @@ fields are set as follows:
  - x5u: a URL that refers to a resource for the X.509 public key certificate
    or certificate chain [RFC5280] corresponding to the key used to digitally sign the
    JWS.
+ - jku: a URL that refers to the key used to digitally sign the JWS.  
 
 #### Payload
 
