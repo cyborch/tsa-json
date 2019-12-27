@@ -11,9 +11,9 @@ at the time it was used.
 
 ### A modern take
 
-The [RFC 3161](https://www.ietf.org/rfc/rfc3161.txt) specifies a binary protocol for
-requesting and providing secure time stamps. The protocol specifies a request which 
-includes a hash of the data to be timestamped and a policy under which to time stamp it.
+While [Roughtime](https://tools.ietf.org/id/draft-roughtime-aanchal-00.html) is a new draft, 
+it is still based on a binary protocol which can be a hindrance against adoption. The protocol
+specifies a request which includes a nonce which is included in the signed response.
 
 This project provides the same data points while utilising modern technologies to achieve
 the same goals. Using the proposed standard [RFC 7515](https://tools.ietf.org/html/rfc7515)
@@ -25,35 +25,22 @@ The TSA is REQUIRED:
 
    1.    to use a trustworthy source of time.
    2.    to include a trustworthy time value for each time-stamp token.
-   3.    to include a unique integer for each newly generated time-stamp
-         token.
-   4.    to produce a time-stamp token upon receiving a valid request
+   3.    to produce a time-stamp token upon receiving a valid request
          from the requester, when it is possible.
-   5.    to include within each time-stamp token an identifier to
-         uniquely indicate the security policy under which the token was
-         created.
-   6.    to only time-stamp a hash representation of the datum, i.e., a
-         data imprint associated with a one-way collision resistant
-         hash-function uniquely identified by an OID.
-   7.    to examine the OID of the one-way collision resistant hash-
-         function and to verify that the hash value length is consistent
-         with the hash algorithm.
-   8.    not to examine the imprint being time-stamped in any way (other
-         than to check its length, as specified in the previous bullet).
-   9.    not to include any identification of the requesting entity in
+   4.    not to examine the message being time-stamped in any way.
+   5.    not to include any identification of the requesting entity in
          the time-stamp tokens.
-   10.   to sign each time-stamp token using a key generated exclusively
+   6.    to sign each time-stamp token using a key generated exclusively
          for this purpose and have this property of the key indicated on
          the corresponding certificate.
 
-These requirements are reused from [RFC 3161](https://www.ietf.org/rfc/rfc3161.txt)
-with the notable exclusion of requirement 11 which is a requierment of extensibility.
-Requirement 11 is not included at the time of this writing, but the inherent 
-extensibility of json should make it relatively easy to add this in a future version.
+These requirements are an abbreviated form of [RFC 3161](https://www.ietf.org/rfc/rfc3161.txt).
 
 ## Time Stamp Request and Response Formats
 
-The service provides a `/sign` endpoint for time stamping requests.
+The service provides a `/sign` endpoint for time stamping requests, and a `/cert` 
+endpoint for getting an out of band certificate which can be used to verify signed 
+responses.
 
 ### Request Format
 
@@ -61,10 +48,8 @@ A time-stamping request a HTTP POST request which has the following body:
 
 TimeStampRequest:
 
- - version: 1 at the time of this writing
- - messageImprint: The hashing algorithm and the hash of the data to be time-stamped.
- - context: The context in which the data is to be time-stamped. This field
-   is optional and will be carried as-is to the response.
+ - version: 2 at the time of this writing
+ - message: The message to be time-stamped, which can be any json value.
  - nonce: The nonce is a large random number with a high probability that the client 
    generates it only once (e.g., a 128 bit integer).
 
@@ -72,12 +57,11 @@ Example:
 
 ```json
 {
-  "version": 1,
-  "messageImprint": {
-    "hashAlgorithm": "sha1",
-    "hashedMessage": "40f1f310cbae011642d33edbad742ea3c581864d"
+  "version": 2,
+  "message": {
+    "some": "value",
+    "other": "value"
   },
-  "context": "some context",
   "nonce": "3455345232345454"
 }
 ```
@@ -95,7 +79,7 @@ The header is a JSON Unprotected header.
 The following fields in the header are currently supported. The
 fields are set as follows:
 
- - typ: application/timestamp-reply+jws
+ - typ: application/timestamped-json
  - alg: The signing algorithm, e.g. RS256
  - x5u: a URL that refers to a resource for the X.509 public key certificate
    or certificate chain [RFC5280] corresponding to the key used to digitally sign the
@@ -125,39 +109,18 @@ StatusInfo:
 
 TimeStampToken:
 
- - contentType: "id-signedData" at the time of this writing
- - content: TimeStampContent
-
-TimeStampContent:
-
- - version: 1 at the time of this writing
- - context: MUST have the same value as the similar field in TimeStampRequest
- - messageImprint: MUST have the same value as the similar field in TimeStampRequest
- - serialNumber: Time-Stamping users MUST be ready to accommodate integers up to at least 160 bits
+ - version: 2 at the time of this writing
+ - message: MUST have the same value as the message field in TimeStampRequest
  - genTime: Generalised time as an ISO 3306 string
- - accuracy: TimeStampAccuracy
- - ordering: If set to true, every time-stamp
-   token from the same TSA can always be ordered based on the genTime
-   field, regardless of the genTime accuracy.
+ - radius: Integer used to indicate the server’s certainty about the reported time.
  - nonce: MUST have the same value as the similar field in TimeStampRequest
 
-TimeStampAccuracy:
+Radius:
 
- - seconds: Integer
- - millis: Integer
- - micros: Integer
-
-If either seconds, millis or micros is missing, then a value of zero
-MUST be taken for the missing field.
-
-By adding the accuracy value to the GeneralizedTime, an upper limit
-of the time at which the time-stamp token has been created by the TSA
-can be obtained.  In the same way, by subtracting the accuracy to the
-GeneralizedTime, a lower limit of the time at which the time-stamp
-token has been created by the TSA can be obtained.
-
-Accuracy can be decomposed in seconds, milliseconds (between 1-999)
-and microseconds (1-999), all expressed as integer.
+Radius (in microseconds) is used to indicate the server’s certainty 
+about the reported time. For example, a radius of 1,000,000μs means the 
+server is reasonably sure that the true time is within one second of the 
+reported time
 
 #### Signature
 
@@ -178,7 +141,7 @@ Header:
 {
   "alg": "RS256",
   "x5u": "https://tsa.stated.at/cert",
-  "typ": "application/timestamp-reply+jws",
+  "typ": "application/timestamped-json",
   "jku": "https://tsa.stated.at/jwk"
 }
 ```
@@ -191,21 +154,14 @@ Payload:
     "status": 0
   },
   "timeStampToken": {
-    "contentType": "id-signedData",
-    "content": {
-      "version": 1,
-      "context": "some context",
-      "messageImprint": "40f1f310cbae011642d33edbad742ea3c581864d",
-      "serialNumber": 1,
-      "genTime": "2019-12-17T13:52:22+0000",
-      "accuracy": {
-        "seconds": 0,
-        "millis": 0,
-        "micros": 0
-      },
-      "ordering": false,
-      "nonce": 3455345232345454
-    }
+    "version": 2,
+    "message": {
+      "some": "value",
+      "other": "value"
+    },
+    "genTime": "2019-12-17T13:52:22+0000",
+    "radius": 34588844,
+    "nonce": "3455345232345454"
   }
 }
 ```
@@ -275,12 +231,11 @@ const jose = require('jose');
     method: 'POST',
     uri: 'https://tsa.stated.at/sign',
     body: JSON.stringify({
-      version: 1,
-      messageImprint: {
-        hashAlgorithm: 'sha1',
-        hashedMessage: '40f1f310cbae011642d33edbad742ea3c581864d'
+      version: 2,
+      message: {
+        some: 'value',
+        other: 'value'
       },
-      context: 'some context',
       nonce: '234534534534'
     })
   });
@@ -292,7 +247,7 @@ const jose = require('jose');
   if (!valid) return;
   const success = token.payload.status.status == 0;
   if (!success) return;
-  const timestamp = Date.parse(token.payload.timeStampToken.content.genTime);
+  const timestamp = Date.parse(token.payload.timeStampToken.genTime);
   console.log('signed time stamp: ' + timestamp);
 })();
 ```

@@ -13,24 +13,6 @@ import java.security.spec.X509EncodedKeySpec
 import java.util.Base64.getDecoder
 
 /**
- * Sign plaintext using a private key.
- *
- * @param plainText The text to be signed.
- *
- * @param privateKey A private key used to sign the text.
- *
- * @return ByteArray with a signature generated using SHA256withRSA algorithm.
- */
-@Throws(Exception::class)
-fun sign(plainText: String, privateKey: PrivateKey?): ByteArray {
-    val privateSignature: Signature = Signature.getInstance("SHA256withRSA")
-    privateSignature.initSign(privateKey)
-    privateSignature.update(plainText.toByteArray(charset("UTF-8")))
-    val signature: ByteArray = privateSignature.sign()
-    return signature
-}
-
-/**
  * Load private key from a predefined location.
  *
  * It is a prerequisite that the create_tsa_certs script is used to generate
@@ -39,7 +21,8 @@ fun sign(plainText: String, privateKey: PrivateKey?): ByteArray {
  * @return A PrivateKey instance.
  */
 fun loadPrivateKey(): PrivateKey {
-    var privateKeyContent = String(Files.readAllBytes(Paths.get("/var/lib/tsa/tsa_key1.pem")))
+    val keystore = config().getProperty("keystore")
+    var privateKeyContent = String(Files.readAllBytes(Paths.get("${keystore}/tsa_key1.pem")))
     privateKeyContent = privateKeyContent
         .replace("\\n".toRegex(), "")
         .replace("-----BEGIN PRIVATE KEY-----", "")
@@ -60,7 +43,8 @@ fun loadPrivateKey(): PrivateKey {
  * @return A PublicKey instance.
  */
 fun loadPublicKey(): PublicKey {
-    var publicKeyContent = String(Files.readAllBytes(Paths.get("/var/lib/tsa/tsa_pub1.pem")))
+    val keystore = config().getProperty("keystore")
+    var publicKeyContent = String(Files.readAllBytes(Paths.get("${keystore}/tsa_pub1.pem")))
     publicKeyContent = publicKeyContent
         .replace("\\n".toRegex(), "")
         .replace("-----BEGIN PUBLIC KEY-----", "")
@@ -80,7 +64,12 @@ fun loadPublicKey(): PublicKey {
  *
  * @return a String containing the PEM formatted public key.
  */
-fun publicKeyContent(): String = String(Files.readAllBytes(Paths.get("/var/lib/tsa/tsa_pub1.pem")))
+fun publicKeyContent(): String =
+    String(Files
+        .readAllBytes(
+            Paths.get("${config().getProperty("keystore")}/tsa_pub1.pem")
+        )
+    )
 
 /**
  * The PEM formatted certificate.
@@ -90,7 +79,12 @@ fun publicKeyContent(): String = String(Files.readAllBytes(Paths.get("/var/lib/t
  *
  * @return a String containing the PEM formatted certificate.
  */
-fun certContent(): String = String(Files.readAllBytes(Paths.get("/var/lib/tsa/tsa_cert1.pem")))
+fun certContent(): String =
+    String(Files
+        .readAllBytes(
+            Paths.get("${config().getProperty("keystore")}/tsa_cert1.pem")
+        )
+    )
 
 /**
  * The JSON Web Key Set containing the public key.

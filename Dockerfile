@@ -1,13 +1,21 @@
-FROM openjdk:13-alpine as develop
+FROM ubuntu:bionic
 
-RUN apk update
+RUN apt update
 
-WORKDIR /opt/tsa
-COPY ./ ./
-RUN ./gradlew --no-daemon build
+RUN apt install -y git curl gcc make openssl openjdk-11-jdk zip
 
-# Install OpenSSL
-RUN apk add openssl
+# Install Rust
+WORKDIR /opt/rust
+RUN curl -f -L https://static.rust-lang.org/rustup.sh -O
+RUN chmod +x rustup.sh
+RUN ./rustup.sh -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Install RoughEnough
+WORKDIR /opt
+RUN git clone -b 1.1.7 https://github.com/int08h/roughenough.git
+WORKDIR /opt/roughenough
+RUN cargo build --release --features default
 
 WORKDIR /opt/tsa
 COPY ./ ./
@@ -15,41 +23,13 @@ COPY ./ ./
 # Create keys
 RUN ./bin/create_tsa_certs
 
-# Build project
-RUN apk add zip
-RUN ./gradlew --no-daemon jar
-WORKDIR /opt/tsa/build/distributions
-RUN unzip tsa-json-1.0-SNAPSHOT
-
-WORKDIR /opt/tsa
-CMD ["/opt/tsa/gradlew", "run"]
-
-FROM openjdk:13-alpine as prod
-
-WORKDIR /opt/tsa
-COPY --from=develop /var/lib/tsa /var/lib/tsa
-COPY --from=develop /opt/tsa/build/distributions/tsa-json-1.0-SNAPSHOT/* /opt/tsa/
-RUN mkdir -p lib
-RUN mv *.jar lib
-RUN mkdir -p bin
-RUN mv tsa-json* bin
-
-RUN mkdir -p config
-COPY ./config/server.properties ./config
-
-RUN apk update
-
-# Install ntp and configure for North America
-RUN apk add chrony
-RUN echo "server 0.fedora.pool.ntp.org iburst" > /etc/chrony.conf
-RUN echo "server 1.fedora.pool.ntp.org iburst" >> /etc/chrony.conf
-RUN echo "server 2.fedora.pool.ntp.org iburst" >> /etc/chrony.conf
-RUN echo "server 3.fedora.pool.ntp.org iburst" >> /etc/chrony.conf
-
-# Add entrypoint
-WORKDIR /opt/tsa
-COPY ./bin/entrypoint.sh ./bin/entrypoint.sh
+# Install TSA
+RUN ./gradlew --no-daemon build jar
+RUN find /opt/tsa
+RUN unzip /opt/tsa/build/distributions/tsa-json-1.0-SNAPSHOT
+RUN mkdir lib && mv tsa-json-1.0-SNAPSHOT/lib/* ./lib/ && mv tsa-json-1.0-SNAPSHOT/bin/* ./bin/
 
 EXPOSE 7000
 
 ENTRYPOINT "/opt/tsa/bin/entrypoint.sh"
+
